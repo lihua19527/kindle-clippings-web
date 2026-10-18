@@ -2,12 +2,14 @@
 # -*- coding: utf-8 -*-
 """剪藏的解析 + 去重接层。
 
-这里刻意**不重新实现**去重算法，而是直接调用 ``D:\\我的读书库\\_tools\\kindle_clippings.py``
-—— 那份实现是拿用户 210 本书 / 15290 条真实剪藏评估出来的，规则细节（同位置、包含 + 同页 +
-区间重叠、bigram Jaccard 只作用于笔记）都写在它的 docstring 里，重写一遍只会引入分歧。
+去重算法**不重新实现**，而是调用现成的 ``kindle_clippings.py``。那份实现是拿 210 本书 /
+15290 条真实剪藏评估出来的，规则细节（同位置、包含 + 同页 + 区间重叠、bigram Jaccard
+只作用于笔记）都写在它的 docstring 里，重写一遍只会引入分歧。
 
-找不到原脚本时退化到 ``app/vendor/kindle_clippings.py``（同一份代码的快照），
-所以这个网页项目单独拷走也能跑。
+这份脚本从哪儿加载，按顺序找：
+
+1. ``config.json`` 的 ``clippings_lib_dir``（你自己机器上想复用别处的原版就填这里）
+2. ``app/vendor/kindle_clippings.py``（随项目携带，**别人下载下来就能跑**）
 """
 
 from __future__ import annotations
@@ -20,14 +22,13 @@ from typing import Any
 APP_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = APP_DIR.parent
 VENDOR_DIR = APP_DIR / "vendor"
-DEFAULT_TOOLS_DIR = Path(r"D:\我的读书库\_tools")
 
 LOADED_FROM: str = ""
 
 
 def _candidates() -> list[Path]:
     dirs: list[Path] = []
-    # 1) 配置里指定的目录（config.json 的 clippings_lib_dir）
+    # 1) 配置里指定的目录（config.json 的 clippings_lib_dir），留给「复用别处原版」的场景
     try:
         from .config import CONFIG
         custom = CONFIG.get("clippings_lib_dir")
@@ -35,9 +36,7 @@ def _candidates() -> list[Path]:
         custom = None
     if custom:
         dirs.append(Path(custom))
-    # 2) 原项目目录：始终是「唯一真相」
-    dirs.append(DEFAULT_TOOLS_DIR)
-    # 3) 随项目携带的快照
+    # 2) 随项目携带的那份 —— 没有配置时就是它，所以整个项目可以单独拷走 / 公开给别人用
     dirs.append(VENDOR_DIR)
     return dirs
 

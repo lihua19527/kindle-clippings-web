@@ -29,7 +29,8 @@ python -m app.server --port 9000  :: 换端口（被占用时会自动 +1 重试
 | Word 导出 | `pip install python-docx` | 点 Word 会提示装包 |
 | PDF 导出 | 本机装了 Edge 或 Chrome | 点 PDF 会提示找不到浏览器 |
 
-去重规则本身来自 `D:\我的读书库\_tools\kindle_clippings.py`（那个双击导出的老脚本），
+去重规则本身来自 [`kindle_clippings.py`](app/vendor/kindle_clippings.py)（那个双击导出的老脚本），
+网页项目只是套了一层界面，**没有重写算法**，所以两边结果逐条一致。
 网页版**直接 import 同一份代码**，所以两边结果永远一致；找不到时会退回本项目 `app/vendor/` 里的副本。
 
 ## 三种导入方式
@@ -100,7 +101,7 @@ PDF 里是黄底 `#f8e6a3` 加黄框标签，Word 里是 `w:highlight` + 底色�
   "host": "127.0.0.1",
   "open_browser": true,
   "edge_path": "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
-  "clippings_lib_dir": "D:\\我的读书库\\_tools"
+  "clippings_lib_dir": "D:\\某处\\_tools"
 }
 ```
 
@@ -109,7 +110,7 @@ PDF 里是黄底 `#f8e6a3` 加黄框标签，Word 里是 `w:highlight` + 底色�
 | `port` / `host` | 监听地址，默认只监听本机 |
 | `open_browser` | 启动后自动开浏览器 |
 | `edge_path` | 指定用来生成 PDF 的浏览器 |
-| `clippings_lib_dir` | 找 `kindle_clippings.py` 的目录（默认 `D:\我的读书库\_tools`，再退回 `app/vendor`） |
+| `clippings_lib_dir` | 想复用别处的 `kindle_clippings.py` 时填那个目录；**不填就用 `app/vendor` 里自带的那份**（默认行为，什么都不用配） |
 
 ## 目录结构
 
@@ -126,7 +127,7 @@ kindle-web/
 │  │  ├─ docx_export.py     python-docx，笔记黄底高亮，书签 + 目录超链接
 │  │  ├─ html_doc.py        PDF 用的一次性 HTML（封面/目录/正文）
 │  │  └─ pdf_export.py      调 Edge/Chrome 无头模式打印 PDF
-│  └─ vendor/            老脚本的副本（找不到 D:\我的读书库 时兜底）
+│  └─ vendor/             kindle_clippings.py 原版（默认就用它，所以项目可以单独拷走）
 ├─ public/
 │  ├─ index.html
 │  ├─ demo-clippings.txt 示例数据（5 本书 / 28 条，含各种重复）
