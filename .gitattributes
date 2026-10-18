@@ -1,5 +1,5 @@
-# 统一按文本处理，但 Windows 批处理必须保持 CRLF，否则 cmd 解析可能出错
-* text=auto
+# 统一按文本处理：仓库里一律 LF，Windows 批处理例外保持 CRLF
+* text=auto eol=lf
 *.cmd text eol=crlf
 *.bat text eol=crlf
 *.png binary

@@ -28,10 +28,9 @@
 html {
   -webkit-text-size-adjust: 100%;
   scroll-behavior: smooth;
+  /* 只留这一处吸顶补偿：再加 scroll-margin-top 会让锚点落点变成 200px 而不是 100px */
   scroll-padding-top: 100px;
 }
-
-[id] { scroll-margin-top: 100px; }
 
 body.page {
   margin: 0;
@@ -1360,3 +1359,8 @@ input[type="range"]::-moz-range-thumb {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: .001ms !important; animation-duration: .001ms !important; }
 }
+
+/* ?still=1 时由 app.js 给 <html> 加上 .is-still：关掉过渡，截图与断言才拿得到终值 */
+html.is-still *,
+html.is-still *::before,
+html.is-still *::after { transition: none !important; animation: none !important; }

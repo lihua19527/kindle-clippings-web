@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import json
+import re
 import struct
 import subprocess
 import sys
@@ -111,6 +112,20 @@ def png_stats(path: Path) -> tuple[int, int, int, float]:
     return width, height, len(raw), sum((v - mean) ** 2 for v in values) / len(values)
 
 
+def underline_states(report: dict) -> set[str]:
+    """从 navUnderlines 里挑出横线完整显示的标签。
+
+    页面回报的形如 `rules=matrix(1, 0, 0, 1, 0, 0)`；scaleX 为 0 表示该横线收起。
+    """
+    lit: set[str] = set()
+    for item in report.get("navUnderlines") or []:
+        name, _, transform = str(item).partition("=")
+        match = re.match(r"matrix\(([-0-9.eE+]+),", transform.strip())
+        if match and float(match.group(1)) > 0.9:
+            lit.add(name)
+    return lit
+
+
 def main() -> int:
     try:
         find_browser()
@@ -167,13 +182,49 @@ def main() -> int:
         check("计数文案带「已选 2 本」", "已选 2 本" in str(report.get("exportCount")),
               str(report.get("exportCount")))
 
+        # ---------- 3.7 导航横线跟随所在区块 ----------
+        report = visit(base, "still=1&probe=1")
+        check("停在首屏时没有标签点亮", report.get("activeNav") == "", str(report.get("activeNav")))
+
+        report = visit(base, "still=1&probe=1&scrollto=rules")
+        check("滚到「去重规则」时它点亮", report.get("activeNav") == "rules",
+              str(report.get("activeNav")))
+        lit = underline_states(report)
+        check("这时只有「去重规则」有横线", lit == {"rules"},
+              f"有横线的标签：{sorted(lit) or '无'}")
+
+        report = visit(base, "still=1&probe=1&scrollto=formats")
+        check("滚到「导出格式」时它点亮", report.get("activeNav") == "formats",
+              str(report.get("activeNav")))
+        lit = underline_states(report)
+        check("这时只有「导出格式」有横线", lit == {"formats"},
+              f"有横线的标签：{sorted(lit) or '无'}")
+
+        report = visit(base, "still=1&probe=1&scrollto=library")
+        check("滚到「书库」时它点亮", report.get("activeNav") == "library",
+              str(report.get("activeNav")))
+        lit = underline_states(report)
+        check("这时只有「书库」有横线", lit == {"library"},
+              f"有横线的标签：{sorted(lit) or '无'}")
+
+        report = visit(base, "still=1&probe=1")
+        check("首屏四个标签都没有横线", underline_states(report) == set(),
+              f"有横线的标签：{sorted(underline_states(report)) or '无'}")
+
+        report = visit(base, "demo=1&still=1&probe=1")
+        check("解析完停在书库时「书库」点亮", report.get("activeNav") == "library",
+              str(report.get("activeNav")))
+        lit = underline_states(report)
+        check("这时只有「书库」有横线", lit == {"library"},
+              f"有横线的标签：{sorted(lit) or '无'}")
+
         # ---------- 4. 截图 ----------
         SHOT_DIR.mkdir(parents=True, exist_ok=True)
         shots = [
             ("home-empty", "still=1&probe=1", "1440,1800"),
-            ("home-demo", "demo=1&still=1&probe=1", "1440,3400"),
-            ("detail", "demo=1&still=1&probe=1&book=1", "1440,2400"),
-            ("narrow", "demo=1&still=1&probe=1", "560,2600"),
+            ("home-demo", "demo=1&still=1&probe=1&scroll=0", "1440,3400"),
+            ("detail", "demo=1&still=1&probe=1&book=1&scroll=0", "1440,2400"),
+            ("narrow", "demo=1&still=1&probe=1&scroll=0", "560,2600"),
         ]
         for name, query, size in shots:
             out = SHOT_DIR / f"{name}.png"

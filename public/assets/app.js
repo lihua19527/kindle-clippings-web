@@ -20,6 +20,16 @@ const PARAMS = new URLSearchParams(location.search);
 const REDUCED =
   PARAMS.get("still") === "1" ||
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+// 注意：scrollIntoView 的 "auto" 会沿用 CSS 的 scroll-behavior: smooth，
+// 想真正瞬间到位必须写 "instant"。
+const SCROLL = REDUCED ? "instant" : "smooth";
+// ?scroll=0 解析完不自动跳到书库（截图要页面停在顶部）
+const AUTOSCROLL = PARAMS.get("scroll") !== "0";
+if (REDUCED) document.documentElement.classList.add("is-still");
+
+function scrollToSection(el) {
+  if (el) el.scrollIntoView({ behavior: SCROLL, block: "start" });
+}
 
 /* ------------------------------------------------------------------ 工具 */
 
@@ -217,6 +227,7 @@ function renderLibrary() {
     status.textContent = `共 ${total.books} 本 · ${total.entries} 条`;
   }
   syncPickUI();
+  syncNav();
 }
 
 /* ------------------------------------------------------- 多选与导出范围 */
@@ -338,7 +349,8 @@ function openBook(id) {
   $("#book-grid").hidden = true;
   $("#export-bar").hidden = true;
   $("#library-status").textContent = `《${book.title}》· ${book.kept} 条`;
-  detail.scrollIntoView({ behavior: REDUCED ? "auto" : "smooth", block: "start" });
+  if (AUTOSCROLL) scrollToSection(detail);
+  syncNav();
 }
 
 function closeBook() {
@@ -346,7 +358,7 @@ function closeBook() {
   $("#book-detail").hidden = true;
   $("#book-detail").innerHTML = "";
   renderLibrary();
-  $("#library").scrollIntoView({ behavior: REDUCED ? "auto" : "smooth", block: "start" });
+  scrollToSection($("#library"));
 }
 
 /* ------------------------------------------------------------------ 导入 */
@@ -718,12 +730,8 @@ function bind() {
   $("#pick-all").addEventListener("change", (e) => pickAllBooks(e.target.checked));
 
   $("#idle-state").addEventListener("click", (e) => {
-    if (e.target.closest("[data-jump]")) {
-      $(e.target.closest("[data-jump]").dataset.jump).scrollIntoView({
-        behavior: REDUCED ? "auto" : "smooth",
-        block: "start",
-      });
-    }
+    const jump = e.target.closest("[data-jump]");
+    if (jump) scrollToSection($(jump.dataset.jump));
   });
 
   let timer = 0;
@@ -791,7 +799,64 @@ function applyPayload(payload) {
     `解析完成：${stats.books} 本书、${stats.entries} 条剪藏，去掉 ${stats.dropped} 条重复（来源：${clip(source, 40)}）。`,
     "is-ok"
   );
-  $("#library").scrollIntoView({ behavior: REDUCED ? "auto" : "smooth", block: "start" });
+  if (AUTOSCROLL) {
+    scrollToSection($("#library"));
+    syncNav();
+  }
+}
+
+/* ------------------------------------------------------------------ 导航高亮 */
+
+const NAV_IDS = ["import", "library", "rules", "formats"];
+
+/**
+ * 让导航栏的横线跟着当前所在区块走。
+ * 判定方法：以导航栏下沿再往下 24px 为基准线，最后一个越过基准线的区块就是「当前区块」。
+ * 还没滚到第一个区块（停在 hero）时，四个标签都不点亮。
+ */
+function syncNav() {
+  const links = $$(".nav-links a");
+  if (!links.length) return;
+
+  const header = $(".site-header");
+  // 区块落点由 html 的 scroll-padding-top:100px 决定，基准线取导航栏高度再往下一点，
+  // 这样刚好滚到位时该区块就算「当前」。
+  const line = (header ? header.getBoundingClientRect().height : 84) + 24;
+  const doc = document.documentElement;
+  let active = "";
+
+  for (const id of NAV_IDS) {
+    const section = document.getElementById(id);
+    if (!section) continue;
+    if (section.getBoundingClientRect().top <= line) active = id;
+  }
+
+  // 页面滚到底时最后一节可能还没越过基准线，直接把它点亮
+  const scrollable = doc.scrollHeight > window.innerHeight + 100;
+  if (scrollable && window.scrollY + window.innerHeight >= doc.scrollHeight - 2) {
+    active = NAV_IDS[NAV_IDS.length - 1];
+  }
+
+  for (const link of links) {
+    const on = link.getAttribute("href") === `#${active}`;
+    if (on) link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
+  }
+}
+
+function watchNav() {
+  let ticking = false;
+  const schedule = () => {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(() => {
+      ticking = false;
+      syncNav();
+    });
+  };
+  window.addEventListener("scroll", schedule, { passive: true });
+  window.addEventListener("resize", schedule);
+  syncNav();
 }
 
 /* ------------------------------------------------------------------ 启动 */
@@ -817,6 +882,17 @@ function reportProbe(extra = {}) {
     exportCount: text("#export-count"),
     packaging: state.packaging,
     checked: document.querySelectorAll("#book-grid [data-pick]:checked").length,
+    // 当前高亮的导航项（href 去掉 #），用于检查滚动联动
+    activeNav: (() => {
+      const link = $(".nav-links a[aria-current='page']");
+      return link ? link.getAttribute("href").slice(1) : "";
+    })(),
+    scrollY: Math.round(window.scrollY),
+    // 每个标签横线的实际缩放：matrix(1,…) 表示横线完整显示，matrix(0,…) 表示没有
+    navUnderlines: $$(".nav-links a").map((a) => {
+      const t = getComputedStyle(a, "::after").transform;
+      return `${a.getAttribute("href").slice(1)}=${t}`;
+    }),
     ...extra,
   };
   fetch("/api/probe", { method: "POST", body: JSON.stringify(report) }).catch(() => {});
@@ -827,6 +903,7 @@ window.addEventListener("error", (event) => reportProbe({ error: String(event.me
 renderStats();
 renderLibrary();
 bind();
+watchNav();
 
 if (PARAMS.get("demo") === "1") {
   loadSample().then(() => {
@@ -847,4 +924,28 @@ if (PARAMS.get("demo") === "1") {
   });
 } else {
   reportProbe();
+}
+
+// 带 ?probe=1 时再补报一次：动画、字体、图片会让布局在 load 之后才稳定，
+// 上面那一报可能还是首屏状态，这里等布局稳定后再把最终状态送回去。
+if (PROBE) {
+  window.addEventListener("load", () => {
+    window.setTimeout(() => {
+      syncNav();
+      reportProbe();
+    }, 260);
+  });
+}
+
+// ?scrollto=rules 让页面滚到指定区块再回报（自检用，避免依赖浏览器对 #锚点的处理时机）
+const SCROLL_TO = PARAMS.get("scrollto");
+if (SCROLL_TO) {
+  window.setTimeout(() => {
+    scrollToSection(document.getElementById(SCROLL_TO));
+    // 横线有 180ms 的过渡，等它走完再回报，不然量到的是过渡起点
+    window.setTimeout(() => {
+      syncNav();
+      reportProbe();
+    }, 420);
+  }, 320);
 }
