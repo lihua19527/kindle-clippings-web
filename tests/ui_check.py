@@ -166,6 +166,9 @@ def main() -> int:
         check("书库网格显示", report.get("gridHidden") is False)
         check("导出栏四种格式按钮", report.get("exportFormats") == ["md", "pdf", "docx", "epub"],
               str(report.get("exportFormats")))
+        labels = set(report.get("formatLabels") or [])
+        missing = [f for f in report.get("exportFormats") or [] if f not in labels]
+        check("每个导出按钮都在处理白名单里", not missing, str(missing))
 
         # ---------- 3. 详情页 ----------
         report = visit(base, "demo=1&still=1&probe=1&book=1")
@@ -176,6 +179,9 @@ def main() -> int:
         check("详情：详情面板显示", report.get("detailHidden") is False)
         check("详情页四种格式按钮", report.get("detailFormats") == ["md", "pdf", "docx", "epub"],
               str(report.get("detailFormats")))
+        labels = set(report.get("formatLabels") or [])
+        missing = [f for f in report.get("detailFormats") or [] if f not in labels]
+        check("详情页每个导出按钮都在白名单里", not missing, str(missing))
 
         # ---------- 3.5 勾选与打包方式 ----------
         report = visit(base, "demo=1&still=1&probe=1&pick=1,3&pack=per_book")
@@ -185,6 +191,22 @@ def main() -> int:
               str(report.get("packaging")))
         check("计数文案带「已选 2 本」", "已选 2 本" in str(report.get("exportCount")),
               str(report.get("exportCount")))
+
+        # ---------- 3.6 真的点一次导出：四种格式都要拿到文件 ----------
+        # 这一步专门防「按钮接上了但点了没反应」（白名单里少写一个格式就会静默返回）
+        for fmt, suffix, floor in (
+            ("md", ".md", 1000),
+            ("pdf", ".pdf", 30000),
+            ("docx", ".docx", 10000),
+            ("epub", ".epub", 5000),
+        ):
+            report = visit(base, f"demo=1&still=1&probe=1&try={fmt}")
+            got = report.get("lastDownload") or {}
+            name = str(got.get("name", ""))
+            size = int(got.get("size") or 0)
+            check(f"点 {fmt} 真的拿到文件（{name or '没拿到'}）",
+                  name.endswith(suffix) and size >= floor,
+                  f"name={name!r} size={size}")
 
         # ---------- 3.7 导航横线跟随所在区块 ----------
         report = visit(base, "still=1&probe=1")

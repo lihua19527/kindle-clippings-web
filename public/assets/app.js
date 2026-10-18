@@ -13,6 +13,7 @@ const state = {
   files: [],         // 已读入内存的剪藏文件
   picked: new Set(), // 勾选待导出的书 id
   packaging: "merged", // merged = 合并成一个文档；per_book = 每本单独打包
+  lastDownload: null,  // 最近一次下载的文件名与字节数（自检用）
 };
 
 const PARAMS = new URLSearchParams(location.search);
@@ -26,6 +27,8 @@ const SCROLL = REDUCED ? "instant" : "smooth";
 // ?scroll=0 解析完不自动跳到书库（截图要页面停在顶部）
 const AUTOSCROLL = PARAMS.get("scroll") !== "0";
 if (REDUCED) document.documentElement.classList.add("is-still");
+// ?probe=1 是自检模式（见文件末尾）：只记录下载、不真的落盘
+if (PARAMS.get("probe") === "1") document.documentElement.classList.add("is-probe");
 
 function scrollToSection(el) {
   if (el) el.scrollIntoView({ behavior: SCROLL, block: "start" });
@@ -511,6 +514,10 @@ function filenameFrom(header, fallback) {
 }
 
 function triggerDownload(blob, name) {
+  state.lastDownload = { name, size: blob.size };
+  // 自检模式下只记录不落地：无头浏览器一旦真的开始下载，
+  // --virtual-time-budget 会一直等它，进程退不出去
+  if (document.documentElement.classList.contains("is-probe")) return;
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -521,12 +528,12 @@ function triggerDownload(blob, name) {
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
-const FORMAT_LABELS = { md: "Markdown", pdf: "PDF", docx: "Word" };
+const FORMAT_LABELS = { md: "Markdown", pdf: "PDF", docx: "Word", epub: "EPUB" };
 
 /**
  * 导出。
  * @param {object} opts
- *   format     md | pdf | docx
+ *   format     md | pdf | docx | epub
  *   scope      all | selected | book（不给就按「有没有勾选」自动判断）
  *   book       单本导出时的书 id
  *   packaging  merged（合并成一个文档）| per_book（每本单独打包）
@@ -538,7 +545,10 @@ async function doExport(opts) {
     return;
   }
   if (state.busy) return;
-  if (!FORMAT_LABELS[format]) return;
+  if (!FORMAT_LABELS[format]) {
+    setStatus(`不支持这种导出格式：${format}`, "is-error");
+    return;
+  }
 
   const scope = opts.scope || (state.picked.size ? "selected" : "all");
   const packaging = opts.packaging || state.packaging;
@@ -897,6 +907,11 @@ function reportProbe(extra = {}) {
     // 两个地方各有哪些导出格式按钮（检查 EPUB 有没有接上）
     exportFormats: $$("#export-bar [data-format]").map((b) => b.dataset.format),
     detailFormats: $$("#book-detail [data-format]").map((b) => b.dataset.format),
+    // 按钮背后的白名单：少写一个格式，点了会静默没反应
+    formatLabels: Object.keys(FORMAT_LABELS),
+    // 最近一次下载（?try=epub 时会有值）：验证「点了确实拿到文件」
+    lastDownload: state.lastDownload,
+    statusText: text("#parse-status"),
     ...extra,
   };
   fetch("/api/probe", { method: "POST", body: JSON.stringify(report) }).catch(() => {});
@@ -910,7 +925,7 @@ bind();
 watchNav();
 
 if (PARAMS.get("demo") === "1") {
-  loadSample().then(() => {
+  loadSample().then(async () => {
     // ?pick=1,3 预勾选几本（截图与自检用）
     const pick = PARAMS.get("pick");
     if (pick) {
@@ -924,6 +939,9 @@ if (PARAMS.get("demo") === "1") {
     if (PARAMS.get("pack")) setPackaging(PARAMS.get("pack"));
     const book = PARAMS.get("book");
     if (book !== null && !Number.isNaN(Number(book))) openBook(Number(book));
+    // ?try=epub 真的点一次导出，把拿到的文件名与字节数一起报回去（自检用）
+    const tryFormat = PARAMS.get("try");
+    if (tryFormat) await doExport({ format: tryFormat });
     reportProbe();
   });
 } else {
