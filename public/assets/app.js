@@ -340,6 +340,7 @@ function openBook(id) {
         <button class="btn btn-secondary" type="button" data-scope="book" data-format="md">Markdown</button>
         <button class="btn btn-secondary" type="button" data-scope="book" data-format="pdf">PDF</button>
         <button class="btn btn-secondary" type="button" data-scope="book" data-format="docx">Word</button>
+        <button class="btn btn-secondary" type="button" data-scope="book" data-format="epub">EPUB</button>
       </div>
     </div>
     <ol class="entry-list">${(book.entries || []).map(entryHTML).join("")}</ol>
@@ -893,6 +894,9 @@ function reportProbe(extra = {}) {
       const t = getComputedStyle(a, "::after").transform;
       return `${a.getAttribute("href").slice(1)}=${t}`;
     }),
+    // 两个地方各有哪些导出格式按钮（检查 EPUB 有没有接上）
+    exportFormats: $$("#export-bar [data-format]").map((b) => b.dataset.format),
+    detailFormats: $$("#book-detail [data-format]").map((b) => b.dataset.format),
     ...extra,
   };
   fetch("/api/probe", { method: "POST", body: JSON.stringify(report) }).catch(() => {});

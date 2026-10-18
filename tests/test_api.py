@@ -256,6 +256,59 @@ class ApiTest(unittest.TestCase):
         for i in range(1, 6):
             self.assertIn(f"book-{i}".encode(), body)
 
+    def test_export_epub_single(self):
+        import io
+        import zipfile
+
+        token = self.parse(text=SAMPLE)["token"]
+        body, headers = self._export(token, "epub", "book", 1)
+        self.assertIn("application/epub+zip", headers["Content-Type"])
+        self.assertEqual(self._name(headers), "人类简史_笔记.epub")
+        zf = zipfile.ZipFile(io.BytesIO(body))
+        # mimetype 必须第一个且不压缩，否则阅读器不认这个包
+        first = zf.infolist()[0]
+        self.assertEqual(first.filename, "mimetype")
+        self.assertEqual(first.compress_type, zipfile.ZIP_STORED)
+        self.assertEqual(zf.read("mimetype"), b"application/epub+zip")
+        self.assertIn("META-INF/container.xml", zf.namelist())
+        opf = zf.read("OEBPS/content.opf").decode("utf-8")
+        self.assertIn("<dc:language>zh-CN</dc:language>", opf)
+        chapter = zf.read("OEBPS/book-01.xhtml").decode("utf-8")
+        self.assertIn("《人类简史》", chapter)
+        self.assertIn("quote-note", chapter)  # 笔记的黄色底纹
+
+    def test_export_epub_merged_has_cover_and_toc(self):
+        import io
+        import zipfile
+
+        token = self.parse(text=SAMPLE)["token"]
+        body, headers = self._export(token, "epub", "all", packaging="merged")
+        self.assertRegex(self._name(headers), r"^读书笔记合集_\d{4}-\d{2}-\d{2}导出\.epub$")
+        zf = zipfile.ZipFile(io.BytesIO(body))
+        names = zf.namelist()
+        self.assertIn("OEBPS/cover.xhtml", names)
+        for i in range(1, 6):
+            self.assertIn(f"OEBPS/book-{i:02d}.xhtml", names)
+        nav = zf.read("OEBPS/nav.xhtml").decode("utf-8")
+        self.assertEqual(nav.count("<a href="), 6)  # 封面 + 5 本
+        ncx = zf.read("OEBPS/toc.ncx").decode("utf-8")
+        self.assertEqual(ncx.count("<navPoint"), 6)
+
+    def test_export_epub_zip(self):
+        import io
+        import zipfile
+
+        token = self.parse(text=SAMPLE)["token"]
+        body, headers = self._export(token, "epub", "all", packaging="per_book")
+        self.assertIn("application/zip", headers["Content-Type"])
+        self.assertRegex(self._name(headers), r"^读书笔记合集_\d{4}-\d{2}-\d{2}导出\.zip$")
+        outer = zipfile.ZipFile(io.BytesIO(body))
+        names = outer.namelist()
+        self.assertEqual(len(names), 5)
+        self.assertIn("人类简史_笔记.epub", names)
+        inner = zipfile.ZipFile(io.BytesIO(outer.read("人类简史_笔记.epub")))
+        self.assertEqual(inner.infolist()[0].filename, "mimetype")
+
     def test_export_selected_books(self):
         token = self.parse(text=SAMPLE)["token"]
         # 书的 id 是解析后的顺序：0=Sapiens 1=人类简史 2=局外人 3=我们仨 4=活着
@@ -288,7 +341,7 @@ class ApiTest(unittest.TestCase):
 
     def test_bad_format_is_400(self):
         token = self.parse(text=SAMPLE)["token"]
-        status, _, _ = self.post("/api/export", {"token": token, "format": "epub"})
+        status, _, _ = self.post("/api/export", {"token": token, "format": "mobi"})
         self.assertEqual(status, 400)
 
     def test_bad_packaging_is_400(self):

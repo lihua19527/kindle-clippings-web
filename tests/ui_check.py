@@ -164,6 +164,8 @@ def main() -> int:
         check("统计 6 条重复", report.get("statDropped") == "6", str(report.get("statDropped")))
         check("导出栏显示", report.get("exportHidden") is False)
         check("书库网格显示", report.get("gridHidden") is False)
+        check("导出栏四种格式按钮", report.get("exportFormats") == ["md", "pdf", "docx", "epub"],
+              str(report.get("exportFormats")))
 
         # ---------- 3. 详情页 ----------
         report = visit(base, "demo=1&still=1&probe=1&book=1")
@@ -172,6 +174,8 @@ def main() -> int:
         check("详情有 7 条", report.get("entries") == 7, str(report.get("entries")))
         check("详情：书库网格隐藏", report.get("gridHidden") is True)
         check("详情：详情面板显示", report.get("detailHidden") is False)
+        check("详情页四种格式按钮", report.get("detailFormats") == ["md", "pdf", "docx", "epub"],
+              str(report.get("detailFormats")))
 
         # ---------- 3.5 勾选与打包方式 ----------
         report = visit(base, "demo=1&still=1&probe=1&pick=1,3&pack=per_book")

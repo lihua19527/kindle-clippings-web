@@ -1,6 +1,6 @@
 # 剪藏台 · kindle clippings
 
-把 Kindle 的 `My Clippings.txt` 变成一本能读的书：**自动去重 → 按书分组 → 导出 Markdown / PDF / Word**。
+把 Kindle 的 `My Clippings.txt` 变成一本能读的书：**自动去重 → 按书分组 → 导出 Markdown / PDF / Word / EPUB**。
 
 界面参考 [blog.simona.plus/lecture-to-notes](https://blog.simona.plus/lecture-to-notes/) 的 Bauhaus 风格自己写的一套，所有解析都在本机完成，剪藏不会离开这台电脑。
 
@@ -16,7 +16,7 @@
 
 | 用途 | 需要的东西 | 缺了会怎样 |
 |---|---|---|
-| 解析 / Markdown / 服务 | Python 3.9+（只用标准库） | 起不来 |
+| 解析 / Markdown / EPUB / 服务 | Python 3.9+（只用标准库） | 起不来 |
 | Word 导出 | `pip install python-docx` | 点 Word 会提示装包 |
 | PDF 导出 | 本机装了 Edge 或 Chrome | 点 PDF 会提示找不到浏览器 |
 
@@ -65,20 +65,25 @@
 
 多本时的「打包方式」有两个：
 
-| 打包方式 | Markdown | PDF | Word |
-|---|---|---|---|
-| 合并成一个文档 | `读书笔记合集_YYYY-MM-DD导出.md` | `读书笔记合集_YYYY-MM-DD导出.pdf` | `读书笔记合集_YYYY-MM-DD导出.docx` |
-| 每本单独打包 | `读书笔记合集_YYYY-MM-DD导出.zip` | 同名 `.zip` | 同名 `.zip` |
+| 打包方式 | Markdown | PDF | Word | EPUB |
+|---|---|---|---|---|
+| 合并成一个文档 | `读书笔记合集_YYYY-MM-DD导出.md` | `读书笔记合集_YYYY-MM-DD导出.pdf` | `读书笔记合集_YYYY-MM-DD导出.docx` | `读书笔记合集_YYYY-MM-DD导出.epub` |
+| 每本单独打包 | `读书笔记合集_YYYY-MM-DD导出.zip` | 同名 `.zip` | 同名 `.zip` | 同名 `.zip` |
 
 - **命名规则**：单本是 `书名_笔记.md`（不带书名号），合集的日期是导出当天。
 - **合并文档带可点击目录**：Markdown 的目录链到各节标题（`[《书名》](#《书名》)`，Obsidian 里可直接跳），
   PDF 里这些锚点会被写成 PDF 命名目标（在目录页点书名直接跳到那一本），
-  Word 里是书签 + 内部超链接（`book_1`…）。
+  Word 里是书签 + 内部超链接（`book_1`…），EPUB 里是 `nav.xhtml` + `toc.ncx` 双份目录。
 - **只选了一本时**，不管打包方式都按单本导出，文件名就是 `书名_笔记.ext`。
 - 压缩包里每本一个文件，名字同样是 `书名_笔记.ext`；重名的书会自动加 `(2)`。
 
 **笔记始终是高亮的**：Markdown 里用 `==笔记==`（Obsidian 能直接渲染），
-PDF 里是黄底 `#f8e6a3` 加黄框标签，Word 里是 `w:highlight` + 底色。
+PDF 里是黄底 `#f8e6a3` 加黄框标签，Word 里是 `w:highlight` + 底色，
+EPUB 里是同样的黄底块 + 黄色 `笔记` 标签（跟着阅读器的字号缩放）。
+
+**EPUB 是给 Kindle 用的**：直接把 `.epub` 拖进 Kindle 就能看（Kindle 现在原生支持 EPUB）。
+包是手写的 EPUB 3 + NCX 兜底，`mimetype` 第一个且不压缩，不依赖 ebooklib / pandoc；
+想自己验的话，`epubcheck` 与 `python D:\ai\epub-doctor\kindle_check.py` 两条线都过。
 
 ## 配置（可选）
 
@@ -115,14 +120,15 @@ kindle-web/
 │  │  ├─ markdown_export.py 单本 / 合并 / 打包成 zip
 │  │  ├─ docx_export.py     python-docx，笔记黄底高亮，书签 + 目录超链接
 │  │  ├─ html_doc.py        PDF 用的一次性 HTML（封面/目录/正文）
-│  │  └─ pdf_export.py      调 Edge/Chrome 无头模式打印 PDF
+│  │  ├─ pdf_export.py      调 Edge/Chrome 无头模式打印 PDF
+│  │  └─ epub_export.py     手写 EPUB 3（zipfile + OPF + XHTML + NCX），给 Kindle 读
 │  └─ vendor/             kindle_clippings.py 原版（默认就用它，所以项目可以单独拷走）
 ├─ public/
 │  ├─ index.html
 │  ├─ demo-clippings.txt 示例数据（5 本书 / 28 条，含各种重复）
 │  └─ assets/{styles.css,app.js,hero.svg,favicon.svg}
 └─ tests/
-   ├─ test_api.py        接口集成测试（解析、去重、三种导出）
+   ├─ test_api.py        接口集成测试（解析、去重、四种导出）
    └─ ui_check.py        无头 Edge 真跑一遍页面 + 截图
 ```
 
@@ -134,7 +140,7 @@ python -m unittest discover -s tests -v
 python tests\ui_check.py
 ```
 
-`test_api.py` 会真的起服务打接口（24 个用例，约 5 秒）；
+`test_api.py` 会真的起服务打接口（27 个用例，约 5 秒）；
 `ui_check.py` 用无头 Edge 打开 `?demo=1`，通过页面上报的 `/api/probe` 自检报告做断言，
 再把截图存进 `.cache/shots/`（没有浏览器时自动跳过）。
 
@@ -144,4 +150,6 @@ python tests\ui_check.py
 - **缓存**：解析结果留在内存里（最多 6 份），导出时只传一个 token，不用把几 MB 剪藏重传一次。
 - **编码**：`My Clippings.txt` 可能是 UTF-8、UTF-8 BOM、UTF-16 或 GB18030，按顺序试，读错就换下一个。
 - **长书**：一本书几百条也能导出，PDF 用浏览器排版，不依赖 Word/LibreOffice。
+- **EPUB 零依赖**：不装 ebooklib / pandoc，标准库 `zipfile` 直接拼包（`mimetype` 第一个且不压缩），
+  中文排版与笔记黄底由自带 CSS 控制；合集版带封面 + 双份目录（`nav.xhtml` 与 `toc.ncx`）。
 - **隐私**：只监听 `127.0.0.1`，没有任何外部请求。

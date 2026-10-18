@@ -35,7 +35,7 @@ from pathlib import Path
 from urllib.parse import quote, urlparse
 
 from .clippings import Options, analyze, decode_bytes, load_kindle_module
-from .render import docx_export, markdown_export, pdf_export
+from .render import docx_export, epub_export, markdown_export, pdf_export
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 PUBLIC_DIR = PROJECT_DIR / "public"
@@ -303,7 +303,7 @@ class Handler(SimpleHTTPRequestHandler):
         packaging = str(payload.get("packaging") or "merged").lower()
         now = datetime.now()
 
-        if fmt not in ("md", "docx", "pdf"):
+        if fmt not in ("md", "docx", "pdf", "epub"):
             raise ValueError(f"不支持的导出格式：{fmt}")
         if packaging not in ("merged", "per_book"):
             raise ValueError(f"不支持的打包方式：{packaging}")
@@ -351,6 +351,7 @@ class Handler(SimpleHTTPRequestHandler):
                 "md": markdown_export.single_markdown,
                 "docx": docx_export.single_docx,
                 "pdf": pdf_export.single_pdf,
+                "epub": epub_export.single_epub,
             }[fmt]
             name, data = single(books[0], now)
         elif packaging == "per_book":
@@ -358,6 +359,7 @@ class Handler(SimpleHTTPRequestHandler):
                 "md": markdown_export.markdown_zip,
                 "docx": docx_export.docx_zip,
                 "pdf": pdf_export.pdf_zip,
+                "epub": epub_export.epub_zip,
             }[fmt]
             name, data = zipped(books, now)
         else:
@@ -365,6 +367,7 @@ class Handler(SimpleHTTPRequestHandler):
                 "md": markdown_export.merged_markdown,
                 "docx": docx_export.merged_docx,
                 "pdf": pdf_export.merged_pdf,
+                "epub": epub_export.merged_epub,
             }[fmt]
             name, data = merged(books, now)
 
@@ -373,6 +376,7 @@ class Handler(SimpleHTTPRequestHandler):
             "zip": "application/zip",
             "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             "pdf": "application/pdf",
+            "epub": "application/epub+zip",
         }[name.rsplit(".", 1)[-1].lower()]
         print(f"  [导出] {name}  {len(data) / 1024:.0f} KB  （{len(books)} 本 / {packaging if len(books) > 1 else 'single'}）")
         self._send(HTTPStatus.OK, data, ctype, {"Content-Disposition": _attachment(name)})
