@@ -132,18 +132,6 @@ kindle-web/
    └─ ui_check.py        无头 Edge 真跑一遍页面 + 截图
 ```
 
-## 测试
-
-```bat
-cd /d D:\ai\kindle-web
-python -m unittest discover -s tests -v
-python tests\ui_check.py
-```
-
-`test_api.py` 会真的起服务打接口（27 个用例，约 5 秒）；
-`ui_check.py` 用无头 Edge 打开 `?demo=1`，通过页面上报的 `/api/probe` 自检报告做断言，
-再把截图存进 `.cache/shots/`（没有浏览器时自动跳过）。
-
 ## 一点实现说明
 
 - **端口**：默认 8765，被占用就 +1 重试，最多试 10 个。
