@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 520" width="560" height="520"
+     role="img" aria-labelledby="heroTitle heroDesc"
+     style="font-family:'Avenir Next','Helvetica Neue','PingFang SC','Microsoft YaHei',sans-serif">
+  <title id="heroTitle">剪藏整理流程</title>
+  <desc id="heroDesc">从 My Clippings.txt 到笔记的五个步骤：导入、解析、去重、按书分组、导出 Markdown / PDF / Word。</desc>
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#20201e"/>
+    </marker>
+  </defs>
+
+  <!-- 外框 -->
+  <rect x="0.75" y="0.75" width="558.5" height="518.5" fill="#faf9f5" stroke="#20201e" stroke-width="1.5"/>
+  <line x1="0.75" y1="58" x2="559.25" y2="58" stroke="#20201e" stroke-width="1.5"/>
+
+  <!-- 表头 -->
+  <text x="22" y="37" font-size="19" font-weight="700" letter-spacing="-0.4" fill="#20201e">clippings</text>
+  <text x="538" y="37" font-size="19" font-weight="700" letter-spacing="-0.4" fill="#20201e" text-anchor="end">notes</text>
+  <line x1="150" y1="31" x2="424" y2="31" stroke="#20201e" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- 01 导入 -->
+  <rect x="22" y="86" width="150" height="128" fill="#ffffff" stroke="#20201e" stroke-width="1.5"/>
+  <circle cx="97" cy="126" r="25" fill="#d93625"/>
+  <rect x="87" y="110" width="20" height="32" fill="#faf9f5"/>
+  <line x1="91" y1="118" x2="103" y2="118" stroke="#20201e" stroke-width="2"/>
+  <line x1="91" y1="124" x2="103" y2="124" stroke="#20201e" stroke-width="2"/>
+  <line x1="91" y1="130" x2="99" y2="130" stroke="#20201e" stroke-width="2"/>
+  <text x="97" y="182" text-anchor="middle" font-size="15" font-weight="700" fill="#20201e">01 导入</text>
+  <text x="97" y="200" text-anchor="middle" font-size="10" fill="#65645e">My Clippings.txt</text>
+
+  <!-- 02 解析 -->
+  <rect x="201" y="86" width="150" height="128" fill="#ffffff" stroke="#20201e" stroke-width="1.5"/>
+  <rect x="254" y="100" width="44" height="52" fill="#234bc4"/>
+  <line x1="262" y1="112" x2="290" y2="112" stroke="#faf9f5" stroke-width="2.5"/>
+  <line x1="262" y1="122" x2="290" y2="122" stroke="#faf9f5" stroke-width="2.5"/>
+  <line x1="262" y1="132" x2="290" y2="132" stroke="#faf9f5" stroke-width="2.5"/>
+  <line x1="262" y1="142" x2="280" y2="142" stroke="#faf9f5" stroke-width="2.5"/>
+  <rect x="283" y="136" width="13" height="13" fill="#f4c434"/>
+  <text x="276" y="182" text-anchor="middle" font-size="15" font-weight="700" fill="#20201e">02 解析</text>
+  <text x="276" y="200" text-anchor="middle" font-size="10" fill="#65645e">书名 · 位置 · 时间</text>
+
+  <!-- 03 去重 -->
+  <rect x="380" y="86" width="150" height="128" fill="#ffffff" stroke="#20201e" stroke-width="1.5"/>
+  <rect x="433" y="98" width="44" height="44" fill="#f4c434"/>
+  <rect x="439" y="105" width="21" height="27" fill="#faf9f5" stroke="#20201e" stroke-width="1"/>
+  <rect x="450" y="112" width="21" height="27" fill="#faf9f5" stroke="#20201e" stroke-width="1.25"/>
+  <line x1="450" y1="112" x2="471" y2="139" stroke="#d93625" stroke-width="2.5"/>
+  <text x="455" y="182" text-anchor="middle" font-size="15" font-weight="700" fill="#20201e">03 去重</text>
+  <text x="455" y="200" text-anchor="middle" font-size="10" fill="#65645e">同位置 / 包含 / 相似度</text>
+
+  <!-- 第一行箭头 -->
+  <line x1="176" y1="150" x2="197" y2="150" stroke="#20201e" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="355" y1="150" x2="376" y2="150" stroke="#20201e" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- 03 → 04 -->
+  <line x1="455" y1="218" x2="455" y2="272" stroke="#20201e" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- 04 分书 -->
+  <rect x="380" y="276" width="150" height="128" fill="#ffffff" stroke="#20201e" stroke-width="1.5"/>
+  <rect x="433" y="289" width="44" height="44" fill="#234bc4"/>
+  <rect x="441" y="297" width="7" height="28" fill="#faf9f5"/>
+  <rect x="451" y="297" width="7" height="28" fill="#faf9f5"/>
+  <rect x="461" y="297" width="7" height="28" fill="#faf9f5"/>
+  <rect x="441" y="328" width="27" height="4" fill="#f4c434"/>
+  <text x="455" y="372" text-anchor="middle" font-size="15" font-weight="700" fill="#20201e">04 分书</text>
+  <text x="455" y="390" text-anchor="middle" font-size="10" fill="#65645e">按书分组</text>
+
+  <!-- 04 → 05 -->
+  <line x1="376" y1="340" x2="176" y2="340" stroke="#20201e" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="276" y="330" text-anchor="middle" font-size="10" fill="#65645e">每本书一份</text>
+
+  <!-- 05 导出 -->
+  <rect x="22" y="276" width="150" height="128" fill="#ffffff" stroke="#20201e" stroke-width="1.5"/>
+  <path d="M73 294 L97 300 L97 330 L73 324 Z" fill="#faf9f5" stroke="#20201e" stroke-width="1.5"/>
+  <path d="M121 294 L97 300 L97 330 L121 324 Z" fill="#faf9f5" stroke="#20201e" stroke-width="1.5"/>
+  <line x1="97" y1="300" x2="97" y2="330" stroke="#20201e" stroke-width="1.5"/>
+  <circle cx="119" cy="322" r="11" fill="#d93625"/>
+  <line x1="119" y1="316" x2="119" y2="327" stroke="#faf9f5" stroke-width="2"/>
+  <path d="M114 323 L119 328 L124 323" fill="none" stroke="#faf9f5" stroke-width="2"/>
+  <text x="97" y="372" text-anchor="middle" font-size="15" font-weight="700" fill="#20201e">05 导出</text>
+  <text x="97" y="390" text-anchor="middle" font-size="10" fill="#65645e">MD · PDF · DOCX</text>
+
+  <!-- 页脚 -->
+  <text x="22" y="470" font-size="10" fill="#65645e">剪藏只在本机解析，导出结果里的笔记仍是高亮。</text>
+  <text x="538" y="472" text-anchor="end" font-size="14" font-weight="750" letter-spacing="1" fill="#d93625">K/C</text>
+</svg>

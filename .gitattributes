@@ -1,0 +1,8 @@
+# 统一按文本处理，但 Windows 批处理必须保持 CRLF，否则 cmd 解析可能出错
+* text=auto
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.png binary
+*.pdf binary
+*.docx binary
+*.zip binary
