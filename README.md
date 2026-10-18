@@ -8,18 +8,9 @@
 
 ## 怎么打开
 
-双击项目里的 **`启动剪藏台.cmd`**，它会起一个本地服务并打开浏览器（默认 <http://127.0.0.1:8765>）。
+点击仓库开头绿色“Code”按钮，再点最后一行“Download ZIP”，将仓库下载到本机，然后解压。
 
-命令行也行：
-
-```bat
-cd /d D:\ai\kindle-web
-python -m app.server              :: 自动开浏览器
-python -m app.server --no-open    :: 不开浏览器
-python -m app.server --port 9000  :: 换端口（被占用时会自动 +1 重试）
-```
-
-关掉那个黑窗口就是退出。
+双击解压文件夹里的 **`启动剪藏台.cmd`**，它会起一个本地服务并打开浏览器（默认 <http://127.0.0.1:8765>）。
 
 ### 依赖
 
@@ -29,9 +20,7 @@ python -m app.server --port 9000  :: 换端口（被占用时会自动 +1 重试
 | Word 导出 | `pip install python-docx` | 点 Word 会提示装包 |
 | PDF 导出 | 本机装了 Edge 或 Chrome | 点 PDF 会提示找不到浏览器 |
 
-去重规则本身来自 [`kindle_clippings.py`](app/vendor/kindle_clippings.py)（那个双击导出的老脚本），
-网页项目只是套了一层界面，**没有重写算法**，所以两边结果逐条一致。
-网页版**直接 import 同一份代码**，所以两边结果永远一致；找不到时会退回本项目 `app/vendor/` 里的副本。
+去重规则本身来自 [`kindle_clippings.py`](app/vendor/kindle_clippings.py)（那个双击导出的老脚本）.
 
 ## 三种导入方式
 
