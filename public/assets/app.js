@@ -26,6 +26,8 @@ const REDUCED =
 const SCROLL = REDUCED ? "instant" : "smooth";
 // ?scroll=0 解析完不自动跳到书库（截图要页面停在顶部）
 const AUTOSCROLL = PARAMS.get("scroll") !== "0";
+// ?session=0 不捡上次导入的结果（截空状态、自检用）
+const RESTORE = PARAMS.get("session") !== "0";
 if (REDUCED) document.documentElement.classList.add("is-still");
 // ?probe=1 是自检模式（见文件末尾）：只记录下载、不真的落盘
 if (PARAMS.get("probe") === "1") document.documentElement.classList.add("is-probe");
@@ -793,7 +795,7 @@ async function walkEntry(entry, out, depth) {
 }
 
 /** /api/parse 的成功结果统一入口（直连 Kindle 与常规解析共用） */
-function applyPayload(payload) {
+function applyPayload(payload, meta = {}) {
   state.data = payload;
   state.token = payload.token;
   state.selected = null;
@@ -806,6 +808,17 @@ function applyPayload(payload) {
   renderLibrary();
   const stats = payload.stats;
   const source = (payload.sources || [])[0] || "剪藏";
+  if (meta.restored) {
+    setStatus(
+      `已接上次导入：${stats.books} 本书、${stats.entries} 条剪藏` +
+        `${meta.savedAt ? `（${formatSaved(meta.savedAt)} 导入）` : ""}。` +
+        "再导入一次就会覆盖它。",
+      "is-ok"
+    );
+    // 刷新时不要把人拽到书库去：停在原来那一屏，状态行已经说清楚了
+    syncNav();
+    return;
+  }
   setStatus(
     `解析完成：${stats.books} 本书、${stats.entries} 条剪藏，去掉 ${stats.dropped} 条重复（来源：${clip(source, 40)}）。`,
     "is-ok"
@@ -813,6 +826,28 @@ function applyPayload(payload) {
   if (AUTOSCROLL) {
     scrollToSection($("#library"));
     syncNav();
+  }
+}
+
+/** 把 "2026-10-19T22:31:00" 写成「10 月 19 日 22:31」 */
+function formatSaved(iso) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/.exec(String(iso || ""));
+  if (!match) return "";
+  const [, , month, day, hour, minute] = match;
+  return `${Number(month)} 月 ${Number(day)} 日 ${hour}:${minute}`;
+}
+
+/** 打开页面时问一次后端：上次导入的还在不在 */
+async function restoreSession() {
+  try {
+    const res = await fetch("/api/session");
+    if (!res.ok) return false;
+    const body = await res.json();
+    if (!body || !body.session) return false;
+    applyPayload(body.session, { restored: true, savedAt: body.session.saved_at });
+    return true;
+  } catch (err) {
+    return false;
   }
 }
 
@@ -944,6 +979,9 @@ if (PARAMS.get("demo") === "1") {
     if (tryFormat) await doExport({ format: tryFormat });
     reportProbe();
   });
+} else if (RESTORE) {
+  // 刷新后先把上次导入的结果捡回来（没有就还是空状态）
+  restoreSession().finally(() => reportProbe());
 } else {
   reportProbe();
 }

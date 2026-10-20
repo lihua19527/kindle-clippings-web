@@ -128,7 +128,7 @@ kindle-web/
 │  ├─ demo-clippings.txt 示例数据（5 本书 / 28 条，含各种重复）
 │  └─ assets/{styles.css,app.js,hero.svg,favicon.svg}
 └─ tests/
-   ├─ test_api.py        接口集成测试（解析、去重、四种导出）
+   ├─ test_api.py        接口集成测试（解析、去重、四种导出、上次导入的存取）
    └─ ui_check.py        无头 Edge 真跑一遍页面 + 截图
 ```
 
@@ -136,6 +136,10 @@ kindle-web/
 
 - **端口**：默认 8765，被占用就 +1 重试，最多试 10 个。
 - **缓存**：解析结果留在内存里（最多 6 份），导出时只传一个 token，不用把几 MB 剪藏重传一次。
+- **刷新不丢**：每次导入的原文与去重选项会写进 `.cache/last-session.json`，
+  刷新页面、关掉浏览器、甚至重启 `启动剪藏台.cmd` 之后，打开页面都会自动接上那次的结果，
+  提示语会写明「已接上次导入：5 本书、22 条剪藏（10 月 20 日 13:16 导入）」。
+  只有**下一次导入**才会覆盖它；想彻底清空就删掉这个文件（`.cache/` 不进版本库）。
 - **编码**：`My Clippings.txt` 可能是 UTF-8、UTF-8 BOM、UTF-16 或 GB18030，按顺序试，读错就换下一个。
 - **长书**：一本书几百条也能导出，PDF 用浏览器排版，不依赖 Word/LibreOffice。
 - **EPUB 零依赖**：不装 ebooklib / pandoc，标准库 `zipfile` 直接拼包（`mimetype` 第一个且不压缩），

@@ -28,6 +28,7 @@ from pathlib import Path
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_DIR))
 
+from app import server  # noqa: E402
 from app.render.pdf_export import find_browser  # noqa: E402
 from app.server import build_server  # noqa: E402
 
@@ -133,6 +134,10 @@ def main() -> int:
         print(f"[跳过] {exc}")
         return 0
 
+    # 测「上次导入」时别动用户真正的那份记录：换成临时文件
+    session_dir = tempfile.mkdtemp(prefix="clipsession-")
+    server.SESSION_PATH = Path(session_dir) / "last-session.json"
+
     httpd = build_server("127.0.0.1", 8811, tries=20)
     base = f"http://127.0.0.1:{httpd.server_address[1]}"
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
@@ -148,7 +153,7 @@ def main() -> int:
         print(f"服务已起：{base}")
 
         # ---------- 1. 空状态 ----------
-        report = visit(base, "still=1&probe=1")
+        report = visit(base, "still=1&probe=1&session=0")
         check("页面脚本无报错", "error" not in report, report.get("error", ""))
         check("空状态：统计为占位符", report.get("statBooks") == "—", str(report.get("statBooks")))
         check("空状态：没有书卡", report.get("cards") == 0, str(report.get("cards")))
@@ -169,6 +174,26 @@ def main() -> int:
         labels = set(report.get("formatLabels") or [])
         missing = [f for f in report.get("exportFormats") or [] if f not in labels]
         check("每个导出按钮都在处理白名单里", not missing, str(missing))
+
+        # ---------- 2.5 刷新后能接上次导入（导入即写盘，重新导入才覆盖） ----------
+        report = visit(base, "still=1&probe=1")
+        check("刷新后自动接上次导入：5 张书卡", report.get("cards") == 5, str(report.get("cards")))
+        check("刷新后统计仍是 5 本", report.get("statBooks") == "5", str(report.get("statBooks")))
+        check("刷新后提示语是「已接上次导入」",
+              "已接上次导入" in str(report.get("statusText")), str(report.get("statusText")))
+        check("刷新后导出栏可用", report.get("exportHidden") is False)
+
+        single = "测试书 (某人)\n- 您在位置 #10-12 的标注 | 添加于 2024年1月1日星期一 上午12:00:00\n\n只有一条。\n==========\n"
+        parsed_single = post(f"{base}/api/parse", {"text": single})
+        check("再导入一次会覆盖上次的结果", parsed_single.get("stats", {}).get("books") == 1,
+              str(parsed_single.get("stats")))
+        report = visit(base, "still=1&probe=1")
+        check("覆盖后只剩 1 张书卡", report.get("cards") == 1, str(report.get("cards")))
+        check("覆盖后统计是 1 本", report.get("statBooks") == "1", str(report.get("statBooks")))
+        check("覆盖后接的是新那份（1 本书）", "1 本书" in str(report.get("statusText")),
+              str(report.get("statusText")))
+        check("接上次导入时停在首屏、不自动滚走", report.get("activeNav") == "",
+              str(report.get("activeNav")))
 
         # ---------- 3. 详情页 ----------
         report = visit(base, "demo=1&still=1&probe=1&book=1")
@@ -247,7 +272,7 @@ def main() -> int:
         # ---------- 4. 截图 ----------
         SHOT_DIR.mkdir(parents=True, exist_ok=True)
         shots = [
-            ("home-empty", "still=1&probe=1", "1440,1800"),
+            ("home-empty", "still=1&probe=1&session=0", "1440,1800"),
             ("home-demo", "demo=1&still=1&probe=1&scroll=0", "1440,3400"),
             ("detail", "demo=1&still=1&probe=1&book=1&scroll=0", "1440,2400"),
             ("narrow", "demo=1&still=1&probe=1&scroll=0", "560,2600"),

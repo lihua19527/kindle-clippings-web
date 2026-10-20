@@ -14,7 +14,9 @@
 from __future__ import annotations
 
 import json
+import shutil
 import sys
+import tempfile
 import threading
 import unittest
 import urllib.error
@@ -25,6 +27,7 @@ PROJECT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_DIR))
 
 from app.server import build_server  # noqa: E402
+from app import server  # noqa: E402
 
 SAMPLE = (PROJECT_DIR / "public" / "demo-clippings.txt").read_text(encoding="utf-8")
 EXPECT_BOOKS = 5
@@ -35,6 +38,9 @@ EXPECT_RAW = 28
 class ApiTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
+        # 测试不能覆盖用户真正的那份「上次导入」：换成临时文件
+        cls._session_dir = tempfile.mkdtemp(prefix="clipsession-")
+        server.SESSION_PATH = Path(cls._session_dir) / "last-session.json"
         cls.httpd = build_server("127.0.0.1", 8799, tries=20)
         cls.base = f"http://127.0.0.1:{cls.httpd.server_address[1]}"
         cls.thread = threading.Thread(target=cls.httpd.serve_forever, daemon=True)
@@ -44,6 +50,7 @@ class ApiTest(unittest.TestCase):
     def tearDownClass(cls) -> None:
         cls.httpd.shutdown()
         cls.httpd.server_close()
+        shutil.rmtree(cls._session_dir, ignore_errors=True)
 
     # ------------------------------------------------------------ 工具
 
@@ -150,6 +157,44 @@ class ApiTest(unittest.TestCase):
     def test_garbage_input_is_400(self):
         status, body, _ = self.post("/api/parse", {"text": "这不是剪藏。随便一段话。"})
         self.assertEqual(status, 400)
+
+    # ------------------------------------------------------------ 上次导入
+
+    def _session(self) -> dict:
+        status, body, _ = self.get("/api/session")
+        self.assertEqual(status, 200)
+        return json.loads(body.decode("utf-8"))["session"]
+
+    def test_session_remembers_last_parse(self):
+        data = self.parse(text=SAMPLE)
+        session = self._session()
+        self.assertIsNotNone(session)
+        self.assertEqual(session["stats"], data["stats"])
+        self.assertEqual(session["stats"]["books"], EXPECT_BOOKS)
+        self.assertTrue(session["saved_at"])
+
+    def test_session_comes_back_after_restart(self):
+        """服务重启（内存清空）后，还有人要就应当从磁盘把上次的重新解析出来。"""
+        self.parse(text=SAMPLE)
+        # 模拟重启：缓存与会话状态都清掉，磁盘上的 last-session.json 留着
+        server.CACHE._data.clear()
+        server._SESSION.update({"loaded": False, "token": None, "parsed": None, "saved_at": None})
+        session = self._session()
+        self.assertEqual(session["stats"]["books"], EXPECT_BOOKS)
+        self.assertEqual(session["stats"]["entries"], EXPECT_ENTRIES)
+        self.assertTrue(server.SESSION_PATH.is_file())
+
+    def test_new_parse_overwrites_session(self):
+        self.parse(text=SAMPLE)
+        single = (
+            "只有一本 (某人)\n"
+            "- 您在位置 #10-12 的标注 | 添加于 2024年1月1日星期一 上午12:00:00\n\n"
+            "只有一条。\n==========\n"
+        )
+        self.parse(text=single)
+        session = self._session()
+        self.assertEqual(session["stats"]["books"], 1)
+        self.assertEqual(session["stats"]["entries"], 1)
 
     # ------------------------------------------------------------ 导出
 

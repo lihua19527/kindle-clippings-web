@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import json
 import mimetypes
+import os
 import re
 import sys
 import threading
@@ -80,6 +81,80 @@ class ParseCache:
 
 
 CACHE = ParseCache()
+
+# 上次导入的内容：刷新页面、重开浏览器、甚至重启服务之后都还在，
+# 直到下一次导入把它覆盖。存在 .cache/last-session.json（不进版本库）。
+SESSION_DIR = PROJECT_DIR / ".cache"
+SESSION_PATH = SESSION_DIR / "last-session.json"
+_SESSION_LOCK = threading.Lock()
+_SESSION: dict = {"loaded": False, "token": None, "saved_at": None, "parsed": None}
+
+
+def _remember(token: str, parsed, saved_at: str | None = None) -> None:
+    """把「当前这次导入」记成会话，顺便保住对象不被 LRU 挤掉。"""
+    _SESSION["loaded"] = True
+    _SESSION["token"] = token
+    _SESSION["parsed"] = parsed
+    if saved_at is not None:
+        _SESSION["saved_at"] = saved_at
+
+
+def _lookup(token: str):
+    """按 token 取解析结果；会话里那一份即使被 LRU 挤掉也还能拿到。"""
+    parsed = CACHE.get(token)
+    if parsed is None and token and token == _SESSION.get("token"):
+        parsed = _SESSION.get("parsed")
+        if parsed is not None:
+            CACHE.put(parsed)
+    return parsed
+
+
+def _save_session(text: str, options: Options, sources: list[str]) -> None:
+    """把这次导入的原文与选项落到磁盘，best-effort：写不了也不影响解析。"""
+    try:
+        SESSION_DIR.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "saved_at": datetime.now().isoformat(timespec="seconds"),
+            "options": options.describe(),
+            "sources": sources,
+            "text": text,
+        }
+        tmp = SESSION_PATH.with_name(SESSION_PATH.name + ".tmp")
+        tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, SESSION_PATH)
+        _SESSION["saved_at"] = payload["saved_at"]
+    except OSError:
+        pass
+
+
+def _read_session_file() -> dict | None:
+    try:
+        data = json.loads(SESSION_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict) or not str(data.get("text") or "").strip():
+        return None
+    return data
+
+
+def _restore_session() -> None:
+    """第一次有人来要「上次的结果」时，把磁盘里的原文重新解析进缓存。"""
+    with _SESSION_LOCK:
+        if _SESSION["loaded"]:
+            return
+        _SESSION["loaded"] = True
+        data = _read_session_file()
+        if data is None:
+            return
+        try:
+            options = Options.from_payload(data.get("options"))
+            parsed = analyze(str(data["text"]), options, list(data.get("sources") or []))
+        except Exception:  # 旧文件、改坏的字段：当作没有
+            return
+        if parsed.kept_total == 0:
+            return
+        _remember(CACHE.put(parsed), parsed, data.get("saved_at"))
+
 
 # 前端自检报告（?probe=1 时由页面 POST 上来，tests/ui_check.py 读取）
 _PROBE: dict = {"report": None}
@@ -160,6 +235,8 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._health()
             if path == "/api/sample":
                 return self._sample()
+            if path == "/api/session":
+                return self._session()
             if path == "/api/probe":
                 return self._json(HTTPStatus.OK, {"ok": True, "probe": _PROBE["report"]})
             if path.startswith("/assets/"):
@@ -235,6 +312,18 @@ class Handler(SimpleHTTPRequestHandler):
         _PROBE["report"] = report
         self._json(HTTPStatus.OK, {"ok": True})
 
+    def _session(self) -> None:
+        """上次导入的结果；没有就返回 session: null。"""
+        _restore_session()
+        parsed = _SESSION.get("parsed")
+        token = _SESSION.get("token")
+        if parsed is None or not token:
+            return self._json(HTTPStatus.OK, {"ok": True, "session": None})
+        body = parsed.to_json()
+        body["token"] = token
+        body["saved_at"] = _SESSION.get("saved_at")
+        self._json(HTTPStatus.OK, {"ok": True, "session": body})
+
     def _parse(self) -> None:
         payload = self._read_json()
         options = Options.from_payload(payload.get("options"))
@@ -287,6 +376,8 @@ class Handler(SimpleHTTPRequestHandler):
                 "（每条剪藏以 ========== 分隔，第一行是「书名 (作者)」）。"
             )
         token = CACHE.put(parsed)
+        _save_session(merged, options, sources)
+        _remember(token, parsed, _SESSION.get("saved_at"))
         body = parsed.to_json()
         body["token"] = token
         self._json(HTTPStatus.OK, body)
@@ -294,7 +385,7 @@ class Handler(SimpleHTTPRequestHandler):
     def _export(self) -> None:
         payload = self._read_json()
         token = str(payload.get("token") or "")
-        parsed = CACHE.get(token)
+        parsed = _lookup(token)
         if parsed is None:
             raise ValueError("解析结果已过期，请重新导入一次再导出。")
 
