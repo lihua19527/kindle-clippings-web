@@ -4,6 +4,37 @@
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
+const android = window.ClippingsAndroid;
+let requestAndroid;
+if (android) {
+  document.documentElement.classList.add("is-android");
+  $$(".android-only").forEach((element) => { element.hidden = false; });
+  const pending = new Map();
+  let requestId = Math.floor(Math.random() * 0x40000000);
+  window.clippingsAndroidResult = (id, json) => {
+    const request = pending.get(id);
+    if (!request) return;
+    pending.delete(id);
+    try {
+      const result = JSON.parse(json);
+      if (result.error) throw new Error(result.error);
+      request.resolve(result);
+    } catch (err) {
+      request.reject(err);
+    }
+  };
+  requestAndroid = (route, body = "{}") => new Promise((resolve, reject) => {
+    const id = ++requestId;
+    pending.set(id, { resolve, reject });
+    try {
+      android.request(id, route, body);
+    } catch (err) {
+      pending.delete(id);
+      reject(err);
+    }
+  });
+}
+
 const state = {
   data: null,        // /api/parse 的响应
   token: null,
@@ -39,6 +70,7 @@ function scrollToSection(el) {
 /* ------------------------------------------------------------------ 工具 */
 
 async function fetchJSON(url, options) {
+  if (android) return requestAndroid(url, options?.body);
   const res = await fetch(url, options);
   let body = null;
   try {
@@ -385,9 +417,12 @@ function chipList(names) {
 async function addFiles(fileList) {
   const all = Array.from(fileList || []);
   const txt = all.filter((f) => /\.txt$/i.test(f.name) || /clippings/i.test(f.name));
-  const picked = txt.length ? txt : all;
+  const picked = txt.length || android ? txt : all;
   if (!picked.length) {
-    setStatus("这些文件里没有 .txt，请选择 My Clippings.txt 或包含它的文件夹。", "is-error");
+    const hint = android
+      ? "请选一个 My Clippings.txt 文件。"
+      : "这些文件里没有 .txt，请选择 My Clippings.txt 或包含它的文件夹。";
+    setStatus(hint, "is-error");
     return;
   }
 
@@ -451,7 +486,8 @@ async function doParse() {
   const text = $("#clip-text").value;
   const folder = $("#folder-path").value.trim();
   if (!text.trim() && !state.files.length && !folder) {
-    setStatus("还没有内容：粘贴一段剪藏、选个文件，或填文件夹路径。", "is-error");
+    const sourceHint = android ? "粘贴一段剪藏或选择文件。" : "粘贴一段剪藏、选个文件，或填文件夹路径。";
+    setStatus(`还没有内容：${sourceHint}`, "is-error");
     $("#clip-text").focus();
     return;
   }
@@ -485,7 +521,7 @@ async function loadSample() {
   if (state.busy) return;
   setBusy(true, "载入中…");
   try {
-    const res = await fetch("/api/sample");
+    const res = await fetch(android ? "/demo-clippings.txt" : "/api/sample");
     if (!res.ok) throw new Error("示例文件缺失");
     const text = await res.text();
     $("#clip-text").value = text;
@@ -565,6 +601,12 @@ async function doExport(opts) {
 
   setBusy(true, "导出中…");
   try {
+    if (android) {
+      const result = await requestAndroid("/api/export", JSON.stringify(payload));
+      if (result.cancelled) setStatus("已取消保存。");
+      else setStatus(`已保存：${result.name}`, "is-ok");
+      return;
+    }
     const res = await fetch("/api/export", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -840,9 +882,7 @@ function formatSaved(iso) {
 /** 打开页面时问一次后端：上次导入的还在不在 */
 async function restoreSession() {
   try {
-    const res = await fetch("/api/session");
-    if (!res.ok) return false;
-    const body = await res.json();
+    const body = await fetchJSON("/api/session");
     if (!body || !body.session) return false;
     applyPayload(body.session, { restored: true, savedAt: body.session.saved_at });
     return true;

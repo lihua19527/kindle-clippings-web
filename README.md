@@ -6,6 +6,31 @@
 
 ![界面](docs/preview-home.png)
 
+## 安卓版
+
+安装剪藏台 APK 后，打开「剪藏台」，点「导入剪藏」→「选择文件」，选中手机里的
+`My Clippings.txt`，再点「解析剪藏」。也可以先点「载入示例」，或粘贴剪藏全文。
+解析结果可以按书查看、搜索，并导出为 Markdown、Word 或 EPUB。导出时由安卓系统
+让你选择文件保存位置。下次打开应用会恢复最近一次成功导入的结果。
+
+应用支持 Android 7.0 及以上的 64 位 ARM 手机和 x86-64 模拟器，使用系统 WebView。
+Python 随 APK 打包。剪藏和上次导入保存在手机上，应用可以离线使用。
+电脑上的 PDF 导出、文件夹路径和自动侦测 Kindle 入口由桌面版提供。
+
+### 从源码构建 APK
+
+安装 JDK 17 或以上、Android SDK Platform 35 和 Build Tools 35.0.0。
+将 Android SDK 路径设为 `ANDROID_HOME`，并确保 Python 3.12 在 PATH 中。
+在仓库根目录运行以下命令：
+
+```sh
+cd android
+./gradlew :app:assembleDebug
+```
+
+Windows 在 `android` 目录执行 `gradlew.bat :app:assembleDebug`。
+安装包生成在 `android/app/build/outputs/apk/debug/app-debug.apk`。
+
 ## 如何使用这个项目
 
 点击仓库开头绿色“Code”按钮，再点最后一行“Download ZIP”，将仓库下载到本机，然后解压。

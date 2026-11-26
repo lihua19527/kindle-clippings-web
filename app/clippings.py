@@ -52,6 +52,14 @@ def load_kindle_module():
     for d in _candidates():
         target = d / "kindle_clippings.py"
         tried.append(str(target))
+        if d == VENDOR_DIR:
+            # 导入随应用打包的版本，兼容只有字节码的 Android 安装包。
+            try:
+                from .vendor import kindle_clippings
+            except ImportError as exc:
+                raise RuntimeError(f"无法导入内置剪藏解析器：{exc}") from exc
+            LOADED_FROM = str(target)
+            return sys.modules.setdefault("kindle_clippings", kindle_clippings)
         if not target.is_file():
             continue
         sys.path.insert(0, str(d))

@@ -1366,3 +1366,9 @@ input[type="range"]::-moz-range-thumb {
 html.is-still *,
 html.is-still *::before,
 html.is-still *::after { transition: none !important; animation: none !important; }
+
+.is-android .desktop-only,
+.is-android [data-format="pdf"],
+.is-android .f-pdf {
+  display: none !important;
+}

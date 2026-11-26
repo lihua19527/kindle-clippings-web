@@ -313,164 +313,177 @@ class Handler(SimpleHTTPRequestHandler):
         self._json(HTTPStatus.OK, {"ok": True})
 
     def _session(self) -> None:
-        """上次导入的结果；没有就返回 session: null。"""
-        _restore_session()
-        parsed = _SESSION.get("parsed")
-        token = _SESSION.get("token")
-        if parsed is None or not token:
-            return self._json(HTTPStatus.OK, {"ok": True, "session": None})
-        body = parsed.to_json()
-        body["token"] = token
-        body["saved_at"] = _SESSION.get("saved_at")
-        self._json(HTTPStatus.OK, {"ok": True, "session": body})
+        self._json(HTTPStatus.OK, session_payload())
 
     def _parse(self) -> None:
-        payload = self._read_json()
-        options = Options.from_payload(payload.get("options"))
-        sources: list[str] = []
-
-        chunks: list[str] = []
-        text = payload.get("text")
-        if isinstance(text, str) and text.strip():
-            chunks.append(text)
-            sources.append("粘贴文本")
-
-        files = payload.get("files")
-        if isinstance(files, list):
-            for item in files:
-                if not isinstance(item, dict):
-                    continue
-                content = item.get("content")
-                name = str(item.get("name") or "My Clippings.txt")
-                if isinstance(content, str) and content.strip():
-                    chunks.append(content)
-                    sources.append(name)
-
-        folder = payload.get("folder")
-        if isinstance(folder, str) and folder.strip():
-            text_or_none, names = _read_folder(Path(folder.strip()))
-            if text_or_none:
-                chunks.append(text_or_none)
-                sources.extend(names)
-
-        if payload.get("detect"):
-            kc = load_kindle_module()
-            found = kc.detect_clippings()
-            if found is None:
-                raise ValueError("没找到已连接的 Kindle（未发现 */documents/My Clippings.txt）。")
-            chunks.append(kc.read_text(found))
-            sources.append(str(found))
-
-        if not chunks:
-            raise ValueError("没有收到剪藏内容：请粘贴文本、选择文件，或指定文件夹。")
-
-        merged = "\n".join(chunk.replace("\r\n", "\n") for chunk in chunks)
-        parsed = analyze(merged, options, sources)
-        # 解析器很宽容：没有分隔符的文本也会被当成一条「标注」，但书名为空。
-        # 这种情况在网页上只会得到一本「未知书籍」，不如直接告诉用户格式不对。
-        if parsed.kept_total == 0 or not any(
-            (book.title or "").strip() for book in parsed.books
-        ):
-            raise ValueError(
-                "这段文本里没有认出剪藏记录。请确认是 Kindle 导出的 My Clippings.txt"
-                "（每条剪藏以 ========== 分隔，第一行是「书名 (作者)」）。"
-            )
-        token = CACHE.put(parsed)
-        _save_session(merged, options, sources)
-        _remember(token, parsed, _SESSION.get("saved_at"))
-        body = parsed.to_json()
-        body["token"] = token
-        self._json(HTTPStatus.OK, body)
+        self._json(HTTPStatus.OK, parse_payload(self._read_json()))
 
     def _export(self) -> None:
-        payload = self._read_json()
-        token = str(payload.get("token") or "")
-        parsed = _lookup(token)
-        if parsed is None:
-            raise ValueError("解析结果已过期，请重新导入一次再导出。")
-
-        fmt = str(payload.get("format") or "md").lower()
-        scope = str(payload.get("scope") or "all").lower()
-        packaging = str(payload.get("packaging") or "merged").lower()
-        now = datetime.now()
-
-        if fmt not in ("md", "docx", "pdf", "epub"):
-            raise ValueError(f"不支持的导出格式：{fmt}")
-        if packaging not in ("merged", "per_book"):
-            raise ValueError(f"不支持的打包方式：{packaging}")
-
-        if scope == "book":
-            try:
-                index = int(payload.get("book", 0))
-            except (TypeError, ValueError):
-                index = 0
-            try:
-                book = parsed.book(index)
-            except KeyError as exc:
-                raise ValueError(str(exc)) from exc
-            books = [book]
-        elif scope == "selected":
-            raw_ids = payload.get("books") or []
-            if not isinstance(raw_ids, list):
-                raise ValueError("books 应该是一个数组。")
-            picks: list = []
-            seen_ids: set[int] = set()
-            for raw in raw_ids:
-                try:
-                    index = int(raw)
-                except (TypeError, ValueError):
-                    continue
-                if index in seen_ids:
-                    continue
-                try:
-                    picks.append(parsed.book(index))
-                except KeyError:
-                    continue
-                seen_ids.add(index)
-            if not picks:
-                raise ValueError("没有选中任何书。")
-            books = picks
-        else:
-            books = parsed.books
-
-        if not books:
-            raise ValueError("没有可导出的书。")
-
-        # 只有一本时不做合集：直接给「书名_笔记.ext」，不管选的是合并还是打包
-        if len(books) == 1:
-            single = {
-                "md": markdown_export.single_markdown,
-                "docx": docx_export.single_docx,
-                "pdf": pdf_export.single_pdf,
-                "epub": epub_export.single_epub,
-            }[fmt]
-            name, data = single(books[0], now)
-        elif packaging == "per_book":
-            zipped = {
-                "md": markdown_export.markdown_zip,
-                "docx": docx_export.docx_zip,
-                "pdf": pdf_export.pdf_zip,
-                "epub": epub_export.epub_zip,
-            }[fmt]
-            name, data = zipped(books, now)
-        else:
-            merged = {
-                "md": markdown_export.merged_markdown,
-                "docx": docx_export.merged_docx,
-                "pdf": pdf_export.merged_pdf,
-                "epub": epub_export.merged_epub,
-            }[fmt]
-            name, data = merged(books, now)
-
-        ctype = {
-            "md": "text/markdown; charset=utf-8",
-            "zip": "application/zip",
-            "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            "pdf": "application/pdf",
-            "epub": "application/epub+zip",
-        }[name.rsplit(".", 1)[-1].lower()]
-        print(f"  [导出] {name}  {len(data) / 1024:.0f} KB  （{len(books)} 本 / {packaging if len(books) > 1 else 'single'}）")
+        name, data, ctype = export_payload(self._read_json())
         self._send(HTTPStatus.OK, data, ctype, {"Content-Disposition": _attachment(name)})
+
+
+def session_payload() -> dict:
+    """上次导入的结果；没有就返回 session: null。"""
+    _restore_session()
+    parsed = _SESSION.get("parsed")
+    token = _SESSION.get("token")
+    if parsed is None or not token:
+        return {"ok": True, "session": None}
+    body = parsed.to_json()
+    body["token"] = token
+    body["saved_at"] = _SESSION.get("saved_at")
+    return {"ok": True, "session": body}
+
+
+def parse_payload(payload: dict, *, desktop_sources: bool = True) -> dict:
+    options = Options.from_payload(payload.get("options"))
+    sources: list[str] = []
+
+    chunks: list[str] = []
+    text = payload.get("text")
+    if isinstance(text, str) and text.strip():
+        chunks.append(text)
+        sources.append("粘贴文本")
+
+    files = payload.get("files")
+    if isinstance(files, list):
+        for item in files:
+            if not isinstance(item, dict):
+                continue
+            content = item.get("content")
+            name = str(item.get("name") or "My Clippings.txt")
+            if isinstance(content, str) and content.strip():
+                chunks.append(content)
+                sources.append(name)
+
+    folder = payload.get("folder")
+    if desktop_sources and isinstance(folder, str) and folder.strip():
+        text_or_none, names = _read_folder(Path(folder.strip()))
+        if text_or_none:
+            chunks.append(text_or_none)
+            sources.extend(names)
+
+    if desktop_sources and payload.get("detect"):
+        kc = load_kindle_module()
+        found = kc.detect_clippings()
+        if found is None:
+            raise ValueError("没找到已连接的 Kindle（未发现 */documents/My Clippings.txt）。")
+        chunks.append(kc.read_text(found))
+        sources.append(str(found))
+
+    if not chunks:
+        hint = "请粘贴文本、选择文件，或指定文件夹。" if desktop_sources else "请粘贴文本或选择文件。"
+        raise ValueError(f"没有收到剪藏内容：{hint}")
+
+    merged = "\n".join(chunk.replace("\r\n", "\n") for chunk in chunks)
+    parsed = analyze(merged, options, sources)
+    # 解析器很宽容：没有分隔符的文本也会被当成一条「标注」，但书名为空。
+    # 这种情况在网页上只会得到一本「未知书籍」，不如直接告诉用户格式不对。
+    if parsed.kept_total == 0 or not any(
+        (book.title or "").strip() for book in parsed.books
+    ):
+        raise ValueError(
+            "这段文本里没有认出剪藏记录。请确认是 Kindle 导出的 My Clippings.txt"
+            "（每条剪藏以 ========== 分隔，第一行是「书名 (作者)」）。"
+        )
+    token = CACHE.put(parsed)
+    with _SESSION_LOCK:
+        _save_session(merged, options, sources)
+        _remember(token, parsed, _SESSION.get("saved_at"))
+    body = parsed.to_json()
+    body["token"] = token
+    return body
+
+
+def export_payload(payload: dict) -> tuple[str, bytes, str]:
+    token = str(payload.get("token") or "")
+    parsed = _lookup(token)
+    if parsed is None:
+        raise ValueError("解析结果已过期，请重新导入一次再导出。")
+
+    fmt = str(payload.get("format") or "md").lower()
+    scope = str(payload.get("scope") or "all").lower()
+    packaging = str(payload.get("packaging") or "merged").lower()
+    now = datetime.now()
+
+    if fmt not in ("md", "docx", "pdf", "epub"):
+        raise ValueError(f"不支持的导出格式：{fmt}")
+    if packaging not in ("merged", "per_book"):
+        raise ValueError(f"不支持的打包方式：{packaging}")
+
+    if scope == "book":
+        try:
+            index = int(payload.get("book", 0))
+        except (TypeError, ValueError):
+            index = 0
+        try:
+            book = parsed.book(index)
+        except KeyError as exc:
+            raise ValueError(str(exc)) from exc
+        books = [book]
+    elif scope == "selected":
+        raw_ids = payload.get("books") or []
+        if not isinstance(raw_ids, list):
+            raise ValueError("books 应该是一个数组。")
+        picks: list = []
+        seen_ids: set[int] = set()
+        for raw in raw_ids:
+            try:
+                index = int(raw)
+            except (TypeError, ValueError):
+                continue
+            if index in seen_ids:
+                continue
+            try:
+                picks.append(parsed.book(index))
+            except KeyError:
+                continue
+            seen_ids.add(index)
+        if not picks:
+            raise ValueError("没有选中任何书。")
+        books = picks
+    else:
+        books = parsed.books
+
+    if not books:
+        raise ValueError("没有可导出的书。")
+
+    # 只有一本时不做合集：直接给「书名_笔记.ext」，不管选的是合并还是打包
+    if len(books) == 1:
+        single = {
+            "md": markdown_export.single_markdown,
+            "docx": docx_export.single_docx,
+            "pdf": pdf_export.single_pdf,
+            "epub": epub_export.single_epub,
+        }[fmt]
+        name, data = single(books[0], now)
+    elif packaging == "per_book":
+        zipped = {
+            "md": markdown_export.markdown_zip,
+            "docx": docx_export.docx_zip,
+            "pdf": pdf_export.pdf_zip,
+            "epub": epub_export.epub_zip,
+        }[fmt]
+        name, data = zipped(books, now)
+    else:
+        merged = {
+            "md": markdown_export.merged_markdown,
+            "docx": docx_export.merged_docx,
+            "pdf": pdf_export.merged_pdf,
+            "epub": epub_export.merged_epub,
+        }[fmt]
+        name, data = merged(books, now)
+
+    ctype = {
+        "md": "text/markdown; charset=utf-8",
+        "zip": "application/zip",
+        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "pdf": "application/pdf",
+        "epub": "application/epub+zip",
+    }[name.rsplit(".", 1)[-1].lower()]
+    print(f"  [导出] {name}  {len(data) / 1024:.0f} KB  （{len(books)} 本 / {packaging if len(books) > 1 else 'single'}）")
+    return name, data, ctype
 
 
 def _read_folder(folder: Path) -> tuple[str, list[str]]:

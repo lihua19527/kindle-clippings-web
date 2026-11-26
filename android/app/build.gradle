@@ -1,0 +1,50 @@
+plugins {
+    id 'com.android.application' version '8.10.1'
+    id 'com.chaquo.python' version '17.2.0'
+}
+
+android {
+    namespace 'com.kindleclippings.desk'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.kindleclippings.desk'
+        minSdk 24
+        targetSdk 35
+        versionCode 1
+        versionName '1.0.0'
+        ndk {
+            abiFilters 'arm64-v8a', 'x86_64'
+        }
+    }
+
+    sourceSets.main.assets.srcDir rootProject.file('../public')
+}
+
+def sharedPython = layout.buildDirectory.dir('generated/shared-python')
+tasks.register('copySharedPython', Sync) {
+    from(rootProject.file('../app')) {
+        include '**/*.py'
+        exclude '**/test_*.py'
+        into 'app'
+    }
+    into sharedPython
+}
+
+chaquopy {
+    defaultConfig {
+        version '3.12'
+        pip {
+            install 'python-docx==1.2.0'
+        }
+    }
+    sourceSets {
+        main {
+            srcDir sharedPython.get().asFile
+        }
+    }
+}
+
+tasks.matching { it.name.startsWith('merge') && it.name.endsWith('PythonSources') }.configureEach {
+    dependsOn tasks.named('copySharedPython')
+}
